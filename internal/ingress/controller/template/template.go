@@ -1149,9 +1149,14 @@ func buildHTTPListener(t interface{}, s interface{}) string {
 		return strings.Join(out, "\n")
 	}
 
-	addrV6 := []string{"[::]"}
+	var addrV6 []string
+
 	if len(tc.Cfg.BindAddressIpv6) > 0 {
-		addrV6 = tc.Cfg.BindAddressIpv6
+		for _, ipv6Addr := range tc.Cfg.BindAddressIpv6 {
+			addrV6 = append(addrV6, "["+ipv6Addr+"]")
+		}
+	} else {
+		addrV6 = []string{"[::]"}
 	}
 
 	out = append(out, httpListener(addrV6, co, tc)...)
@@ -1187,9 +1192,14 @@ func buildHTTPSListener(t interface{}, s interface{}) string {
 		return strings.Join(out, "\n")
 	}
 
-	addrV6 := []string{"[::]"}
+	var addrV6 []string
+
 	if len(tc.Cfg.BindAddressIpv6) > 0 {
-		addrV6 = tc.Cfg.BindAddressIpv6
+		for _, ipv6Addr := range tc.Cfg.BindAddressIpv6 {
+			addrV6 = append(addrV6, "["+ipv6Addr+"]")
+		}
+	} else {
+		addrV6 = []string{"[::]"}
 	}
 
 	out = append(out, httpsListener(addrV6, co, tc)...)

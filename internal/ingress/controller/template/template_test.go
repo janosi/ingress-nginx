@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	jsoniter "github.com/json-iterator/go"
+	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,6 +54,10 @@ func init() {
 		nginx.TemplatePath = path
 	}
 }
+
+const (
+	defServerName = "_"
+)
 
 var (
 	// TODO: add tests for SSLPassthrough
@@ -1430,5 +1435,289 @@ modsecurity_rules_file /etc/nginx/modsecurity/modsecurity.conf;
 		if testCase.expected != actual {
 			t.Errorf("%v: expected '%v' but returned '%v'", testCase.description, testCase.expected, actual)
 		}
+	}
+}
+
+func TestBuildHTTPListener(t *testing.T) {
+	testServer1 := "foo.com"
+
+	testCases := map[string]struct {
+		templateConfig   config.TemplateConfig
+		hostName         string
+		expectedListener string
+	}{
+		"Basic case": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 80  ;",
+		},
+		"Default server": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: defServerName,
+					},
+				},
+			},
+			hostName:         defServerName,
+			expectedListener: "listen 80 default_server backlog=0 ;",
+		},
+		"IPv4 binding address defined": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{
+					BindAddressIpv4: []string{
+						"127.0.0.1",
+					},
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 127.0.0.1:80  ;",
+		},
+		"IPv4 binding addresses are defined": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{
+					BindAddressIpv4: []string{
+						"127.0.0.1",
+						"169.254.0.1",
+					},
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 127.0.0.1:80  ;\nlisten 169.254.0.1:80  ;",
+		},
+		"IPv6 enabled, no binding address defined": {
+			templateConfig: config.TemplateConfig{
+				IsIPV6Enabled: true,
+				Cfg:           config.Configuration{},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 80  ;\nlisten [::]:80  ;",
+		},
+		"IPv6 binding addresses defined": {
+			templateConfig: config.TemplateConfig{
+				IsIPV6Enabled: true,
+				Cfg: config.Configuration{
+					BindAddressIpv6: []string{
+						"fe80::1",
+					},
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 80  ;\nlisten [fe80::1]:80  ;",
+		},
+		"Proxy protocol usage configured": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{
+					BindAddressIpv4: []string{
+						"169.254.0.1",
+					},
+					UseProxyProtocol: true,
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTP: 80,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 169.254.0.1:80 proxy_protocol ;",
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(*testing.T) {
+			listener := buildHTTPListener(tc.templateConfig, tc.hostName)
+			assert.Equal(t, tc.expectedListener, listener)
+		})
+	}
+}
+
+func TestBuildHTTPSListener(t *testing.T) {
+	testServer1 := "foo.com"
+
+	testCases := map[string]struct {
+		templateConfig   config.TemplateConfig
+		hostName         string
+		expectedListener string
+	}{
+		"Basic case": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 443  ssl ;",
+		},
+		"Default server": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: defServerName,
+					},
+				},
+			},
+			hostName:         defServerName,
+			expectedListener: "listen 443 default_server backlog=0 ssl ;",
+		},
+		"IPv4 binding address defined": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{
+					BindAddressIpv4: []string{
+						"127.0.0.1",
+					},
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 127.0.0.1:443  ssl ;",
+		},
+		"IPv4 binding addresses are defined": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{
+					BindAddressIpv4: []string{
+						"127.0.0.1",
+						"169.254.0.1",
+					},
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 127.0.0.1:443  ssl ;\nlisten 169.254.0.1:443  ssl ;",
+		},
+		"IPv6 enabled, no binding address defined": {
+			templateConfig: config.TemplateConfig{
+				IsIPV6Enabled: true,
+				Cfg:           config.Configuration{},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 443  ssl ;\nlisten [::]:443  ssl ;",
+		},
+		"IPv6 binding addresses defined": {
+			templateConfig: config.TemplateConfig{
+				IsIPV6Enabled: true,
+				Cfg: config.Configuration{
+					BindAddressIpv6: []string{
+						"fe80::1",
+					},
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 443  ssl ;\nlisten [fe80::1]:443  ssl ;",
+		},
+		"Proxy protocol usage configured": {
+			templateConfig: config.TemplateConfig{
+				Cfg: config.Configuration{
+					BindAddressIpv4: []string{
+						"169.254.0.1",
+					},
+					UseProxyProtocol: true,
+				},
+				ListenPorts: &config.ListenPorts{
+					HTTPS: 443,
+				},
+				Servers: []*ingress.Server{
+					&ingress.Server{
+						Hostname: testServer1,
+					},
+				},
+			},
+			hostName:         testServer1,
+			expectedListener: "listen 169.254.0.1:443 proxy_protocol proxy_protocol ssl ;",
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(*testing.T) {
+			listener := buildHTTPSListener(tc.templateConfig, tc.hostName)
+			assert.Equal(t, tc.expectedListener, listener)
+		})
 	}
 }
